@@ -1,0 +1,117 @@
+
+
+library(readr)
+#Esto se predecirá
+texting=read_csv("sentimientosDF-PedroCastill#.csv")
+
+#Esto tiene los sentimientos colocados por una persona
+tweets=read_csv("df_fin.csv")
+
+datatotal=c(tweets,texting)
+
+
+#tweets=df1_para_R_S
+str(tweets)
+#Números de -2 a 2, evitar sesgo
+tweets$Negative=as.factor(tweets$Sentimiento<0.5) #No necesariamente menor de cero podría ser ser -1 o 0.5- regresi
+#Random Forest 
+
+table(tweets$Negative)
+
+
+#3
+install.packages("tm")
+library(NLP)
+
+library(tm)
+install.packages("SnowballC")
+
+library(SnowballC)
+
+corpus=Corpus(VectorSource(tweets$text))
+corpus
+
+corpus[[800]]$content
+
+#Todo a minúsculas
+corpus=tm_map(corpus,tolower)
+corpus[[5]]$content
+
+#remover puntuación
+corpus=tm_map(corpus,removePunctuation)
+corpus[[5]]$content
+
+#remover stopwords y pedrocastillo
+corpus=tm_map(corpus,removeWords,c("pedrocastillo",stopwords("spanish")))
+corpus[[5]]$content
+
+#Stem document
+corpus=tm_map(corpus,stemDocument)
+corpus[[5]]$content
+
+#Create matriz
+
+frequencies=DocumentTermMatrix(corpus)
+frequencies
+
+#Mirar la matriz
+inspect(frequencies[800:805,505:515])
+
+#ver frecuencia de palabras
+findFreqTerms(frequencies,lowfreq=20)
+
+#Eliminar las palabras poco frecuentes
+sparse=removeSparseTerms(frequencies,0.999)
+sparse
+
+#Convertir a dataframe
+tweetsSparse=as.data.frame((as.matrix(sparse)))
+
+#Añadir variables
+tweetsSparse$Negative=tweets$Negative
+
+#Separamos data
+install.packages("caTools")
+library(caTools)
+set.seed(123) #Elegir filas o crear contador y separar con contador
+data1=tweetsSparse[1:1000,]
+data2=tweetsSparse[1001:4114,]
+
+split=sample.split(data1$Negative,SplitRatio=0.7)
+trainSparse=subset(data1,split==TRUE)
+testSparse=subset(data1,split==FALSE)
+
+#Árbol de decisiones
+
+install.packages("rpart")
+library(rpart)
+install.packages("rpart.plot")
+library(rpart.plot)
+tweetCART=rpart(Negative ~ .,data=trainSparse,control = rpart.control(minbucket = 5))
+prp(tweetCART)
+#Predecir
+predictCART=predict(tweetCART,newdata=testSparse,type = "class")
+table(testSparse$Negative,predictCART)
+#Qué se repite más accuracy
+table(testSparse$Negative)
+
+predictnew=predict(tweetCART,newdata=data2,type = "class")
+predictnew=predictnew
+predictnew1=as.data.frame(predictnew)
+
+table(predictnew)
+
+#Random Forest model
+install.packages("randomForest")
+library(randomForest)
+set.seed(123)
+tweetRF=randomForest(Negative ~ .,data=trainSparse)
+
+#Predicciones
+predictRF=predict(tweetRF,newdata=testSparse)
+table(testSparse$Negative,predictRF)
+
+#Logistico model
+model=glm(Negative ~ .,data=trainSparse,family=binomial)
+predictRL=predict(model,newdata=testSparse,type = "response")
+table(testSparse$Negative,predictRL>0.95)
